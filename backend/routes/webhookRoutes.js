@@ -2,12 +2,12 @@ import express from "express";
 import Stripe from "stripe";
 import dotenv from "dotenv";
 import bodyParser from "body-parser";
+import Transaction from "../models/Transaction.js";
 
 dotenv.config();
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-// Use raw body parser for Stripe webhooks
 router.post(
   "/stripe",
   bodyParser.raw({ type: "application/json" }),
@@ -23,10 +23,24 @@ router.post(
 
       if (event.type === "payment_intent.succeeded") {
         const paymentIntent = event.data.object;
-        console.log("Payment successful:", paymentIntent.id);
-        // Update database or notify merchant
+
+        await Transaction.findOneAndUpdate(
+          { paymentId: paymentIntent.id },
+          { status: "success" },
+          { new: true }
+        );
+
+        console.log("✅ Payment Successful:", paymentIntent.id);
       } else if (event.type === "payment_intent.payment_failed") {
-        console.log("Payment failed:", event.data.object.last_payment_error);
+        const paymentIntent = event.data.object;
+
+        await Transaction.findOneAndUpdate(
+          { paymentId: paymentIntent.id },
+          { status: "failed" },
+          { new: true }
+        );
+
+        console.log("❌ Payment Failed:", paymentIntent.id);
       }
 
       res.json({ received: true });
